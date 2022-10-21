@@ -1,0 +1,1 @@
+featureCounts -T 5 -t exon -g gene_name -a hg38.gtf -p -s 0 -o ALDH2_FeatureCounts.txt *sort*bam
