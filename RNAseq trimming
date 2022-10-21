@@ -1,0 +1,6 @@
+RNAseq trimming:
+trim_galore -q 20 --trim1 --fastqc --paired Iso_GG_1_1.fq.gz Iso_GG_1_2.fq.gz
+trim_galore -q 20 --trim1 --fastqc --paired Iso_GG_2_1.fq.gz Iso_GG_2_2.fq.gz
+trim_galore -q 20 --trim1 --fastqc --paired ALDH2*1/*2_1_1.fq.gz ALDH2*1/*2_1_2.fq.gz
+trim_galore -q 20 --trim1 --fastqc --paired ALDH2*1/*2_2_1.fq.gz ALDH2*1/*2_2_2.fq.gz
+
