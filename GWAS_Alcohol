@@ -1,0 +1,1 @@
+plink --bfile rs671 --logistic --pheno pheno_cad.txt --covar covar_alcohol.txt --out rs671_CAD_Alcohol
