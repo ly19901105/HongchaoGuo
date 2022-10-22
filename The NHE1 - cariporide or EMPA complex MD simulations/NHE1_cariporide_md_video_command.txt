@@ -1,0 +1,3 @@
+mx trjconv -s md_0_10.tpr -f md_0_10_center_fit.xtc -o NHE1_cariporide_traj_0_10_1.pdb -b 0 -e 50000 -skip 20
+mx trjconv -s md_10_100.tpr -f md_10_100_center_fit.xtc -o NHE1_EMPA_cariporide_10_100_1.pdb -b 0 -e 500000 -skip 200
+
