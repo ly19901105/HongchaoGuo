@@ -1,0 +1,107 @@
+starting file: NHE1_EMPA.pdb 
+the drug Empagliflozin (EMPA) is denoted as EMP.
+
+1. parse out ligand
+	grep EMP NHE1_EMPA.pdb > emp.pdb
+
+2. clean PDB file so it contains only protein chain A
+
+	grep -v EMP NHE1_EMPA.pdb > NHE1_clean.pdb
+
+3. Prepare ligand
+add all Hs to ligand in Avogadro (v1.97.0), save as mol2 file.
+change title and rename ligand id (from UNL1 to EMP) in mol2 file.
+	sed -i 's/UNL1/EMP/' emp.mol2
+We  used the perl script form the tutorial (http://www.mdtutorials.com/gmx/complex/01_pdb2gmx.html) to reorder bonds
+	perl sort_mol2_bonds.pl emp.mol2 emp_fix.mol2
+We used the CGENFF webserver to generate the .str file.
+We used python script and charmm36 (https://cgenff.umaryland.edu/) to generate the required ligand files.
+	python cgenff_charmm2gmx.py EMP emp_fix.mol2 emp.str charmm36-jul2021.ff
+We used GROMACS v2022.2 to generate the .gro file for the ligand. We downloaded the charmm36-jul2021 and placed in ythe wprking directory. The CHARMM forcefileds and the TIP3P implicit water model was used.
+	gmx editconf -f emp_ini.pdb -o emp.gro
+
+4. Prepare protein
+We used GROMCS to convert cleaned protein PDB file to processed .gro file. The CHARMM forcefield and TIP3P was used as before.
+	gmx editconf -f NHE1_clean.pdb -o NHE1_processed.gro -ignh
+
+5. Prepare Complex
+We copied the processed protein .gro file to the complex.gro file.
+	cp NHE1_processed.gro complex.gro
+Copy over the atoms from the emp.gro file to the complex.gro file
+Chnage the total number of atoms in the file (first line)
+Add 1 molecule of EMP to the topol.top file
+Add the ligand topology and parmeter files to the topol.top file. (emp.itp, emp.prm)
+
+6. Solvation
+	gmx editconf -f complex.gro -o newbox.gro -bt dodecahedron -d 1.0
+	gmx solvate -cp newbox.gro -cs spc216.gro -p topol.top -o solv.gro
+
+7. Add ions to neutralize the system
+	gmx grompp -f NHE1_EMPA_ions.mdp -c solv.gro -p topol.top -o ions.tpr
+	gmx genion -s ions.tpr -o solv_ions.gro -p topol.top -pname SOD -nname CL -neutral
+
+8. Energy Minimization
+	gmx grompp -f NHE1_EMPA_em.mdp -c solv_ions.gro -p topol.top -o em.tpr
+	gmx mdrun -v -deffnm em
+
+9. Restraining the ligand
+Define a group not including any Hydrogen atoms
+	gmx make_ndx -f emp.gro -o index_emp.ndx
+	> 0 & ! a H*
+	> q
+Create the restraint group
+	gmx genrestr -f emp.gro -n index_emp.ndx -o posre_emp.itp -fc 1000 1000 1000
+Add the posre_emp.itp file to topol.top 
+Create a group comprising protein_ligand and water_ions to model MD for protein in water.
+	gmx make_ndx -f em.gro -o index.ndx
+	> 1 | 13
+	> 15 | 14
+	> q
+
+10. isothermal-isochoric equilibration
+	gmx grompp -f NHE1_EMPA_nvt.mdp -c em.gro -r em.gro -p topol.top -n index.ndx -o nvt.tpr
+	gmx mdrun -deffnm nvt -v -nt 100 -pin on
+
+11. isothermal-isobaric equilibration
+	gmx grompp -f NHE1_EMPA_NHE1_EMPA_NHE1_EMPA_npt.mdp -c nvt.gro -t nvt.cpt -r nvt.gro -p topol.top -n index.ndx -o npt.tpr
+	gmx mdrun -deffnm npt -v -nt 100 -pin on
+
+12. 10ns MD
+	gmx grompp -f md.mdp -c npt.gro -t npt.cpt -p topol.top -n index.ndx -o md_0_10.tpr
+	gmx mdrun -deffnm md_0_10 -v -nt 100 -pin on
+
+13. 100ns MD
+	gmx grompp -f md_extend.mdp -c md_0_10.gro -t md_0_10.cpt -p topol.top -n index.ndx -o md_10_100.tpr
+	gmx mdrun -deffnm md_10_100 -v -nt 100 -pin on
+
+14. Centering resulting structures
+	gmx trjconv -s md_0_10.tpr -f md_0_10.xtc -o md_0_10_center.xtc -center -pbc mol -ur compact
+	gmx trjconv -s md_10_100.tpr -f md_10_100.xtc -o md_10_100_center.xtc -center -pbc mol -ur compact
+15. Rotational and Translational fitting
+	gmx trjconv -s md_0_10.tpr -f md_0_10_center.xtc -o md_0_10_center_fit.xtc -fit rot+trans
+	gmx trjconv -s md_10_100.tpr -f md_10_100_center.xtc -o md_0_10_center_fit.xtc -fit rot+trans
+16. MD videos
+	gmx trjconv -s md_0_10.tpr -f md_0_10_center_fit.xtc -o NHE1_EMPA_traj_0_10_1.pdb -b 0 -e 50000 -skip 20
+	gmx trjconv -s md_10_100.tpr -f md_10_100_center_fit.xtc -o NHE1_EMPA_EMPA_10_100_1.pdb -b 0 -e 500000 -skip 200
+
+17. Calculate ligand RMSD
+Create a group comprising ligand heavy atoms (non Hs)
+	gmx make_ndx -f em.gro -n index.ndx
+	> 13 & ! a H*
+	> name 20 EMP_heavy
+	> q
+Calculate ligand RMSD
+	gmx rms -s em.tpr -f md_10_100_center.xtc -n index.ndx -tu ns -o rmsd_EMPA.xvg
+
+18. Calculate Interaction Energy
+Prepare for MD rerun using different egergy groups defined in ie.mdp file
+	gmx grompp -f NHE1_EMPA_ie.mdp -c npt.gro -t npt.cpt -p topol.top -n index.ndx -o ie.tpr
+	gmx mdrun -deffnm ie -rerun md_10_100.xtc -nb cpu -nt 100 -pin on
+	gmx energy -f ie.edr -o NHE1_EMPA_interaction_energy.xvg
+	> 21 22
+	>
+
+19. Calculate system density
+	gmx density -f md_10_100.xtc -n index.ndx -o NHE1_EMPA_density.xvg
+
+
